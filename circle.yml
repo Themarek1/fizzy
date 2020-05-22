@@ -110,7 +110,7 @@ commands:
           working_directory: ~/build
           command: |
             rm -f CMakeCache.txt
-            cmake ../project -G Ninja -DCMAKE_INSTALL_PREFIX=~/install -DCMAKE_BUILD_TYPE=<<parameters.build_type>> -DFIZZY_TESTING=ON <<parameters.cmake_options>>
+            cmake ../project -G Ninja -DCMAKE_INSTALL_PREFIX=~/install -DCMAKE_BUILD_TYPE=<<parameters.build_type>> -DFIZZY_TESTING=ON -DFIZZY_WASI=ON <<parameters.cmake_options>>
       - save_cache:
           name: "Save Hunter cache"
           key: *hunter-cache-key
