@@ -25,11 +25,37 @@ fizzy::ExecutionResult wasi_proc_exit(fizzy::Instance&, fizzy::span<const fizzy:
     return fizzy::Trap;
 }
 
+fizzy::ExecutionResult wasi_fd_write(
+    fizzy::Instance& instance, fizzy::span<const fizzy::Value> args, int)
+{
+    const auto fd = args[0].as<uint32_t>();
+    const auto iov_ptr = args[1].as<uint32_t>();
+    const auto iov_cnt = args[2].as<uint32_t>();
+    const auto nwritten_ptr = args[3].as<uint32_t>();
+
+    std::vector<uvwasi_ciovec_t> iovs(iov_cnt);
+    // TODO: not sure what to pass as end, passing memory size...
+    uvwasi_errno_t ret = uvwasi_serdes_readv_ciovec_t(instance.memory->data(),
+        instance.memory->size(), iov_ptr, iovs.data(), static_cast<uvwasi_size_t>(iovs.size()));
+    if (ret != UVWASI_ESUCCESS)
+        return fizzy::Value{uint32_t{ret}};
+
+    uvwasi_size_t nwritten;
+    ret = uvwasi_fd_write(&state, static_cast<uvwasi_fd_t>(fd), iovs.data(),
+        static_cast<uvwasi_size_t>(iovs.size()), &nwritten);
+    uvwasi_serdes_write_uint32_t(instance.memory->data(), nwritten_ptr, nwritten);
+
+    return fizzy::Value{uint32_t{ret}};
+}
+
 bool run(int argc, const char** argv)
 {
     const std::vector<fizzy::ImportedFunction> wasi_functions = {
         {"wasi_snapshot_preview1", "proc_exit", {fizzy::ValType::i32}, std::nullopt,
             wasi_proc_exit},
+        {"wasi_snapshot_preview1", "fd_write",
+            {fizzy::ValType::i32, fizzy::ValType::i32, fizzy::ValType::i32, fizzy::ValType::i32},
+            fizzy::ValType::i32, wasi_fd_write},
     };
 
     uvwasi_options_t options = {
