@@ -22,6 +22,9 @@ if(HUNTER_ENABLED)
 endif()
 find_package(GTest REQUIRED)
 
+include(ProjectWabt)
+include(ProjectWasm3)
+
 set(fizzy_include_dir ${PROJECT_SOURCE_DIR}/lib/fizzy)
 
 add_subdirectory(utils)
