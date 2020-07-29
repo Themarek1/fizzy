@@ -27,8 +27,8 @@ ExternalProject_Add(wabt
     SOURCE_DIR ${source_dir}
     BINARY_DIR ${binary_dir}
     GIT_REPOSITORY https://github.com/WebAssembly/wabt
-    GIT_TAG 1.0.12
-    GIT_SUBMODULES ""
+    GIT_TAG 1.0.19
+    GIT_SUBMODULES "third_party/wasm-c-api"
     GIT_SHALLOW TRUE
     CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
