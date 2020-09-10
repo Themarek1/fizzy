@@ -17,6 +17,7 @@ target_sources(
 
     PRIVATE
     bytes.hpp
+    capi.cpp
     constexpr_vector.hpp
     exceptions.cpp
     exceptions.hpp
