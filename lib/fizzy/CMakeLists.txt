@@ -2,11 +2,20 @@
 # Copyright 2019-2020 The Fizzy Authors.
 # SPDX-License-Identifier: Apache-2.0
 
+set(INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
+
 add_library(fizzy)
 add_library(fizzy::fizzy ALIAS fizzy)
+target_compile_features(fizzy PUBLIC cxx_std_17)
+target_include_directories(fizzy PUBLIC ${INCLUDE_DIR})
 
 target_sources(
-    fizzy PRIVATE
+    fizzy
+
+    PUBLIC
+    ${INCLUDE_DIR}/fizzy/fizzy.h
+
+    PRIVATE
     bytes.hpp
     constexpr_vector.hpp
     exceptions.cpp
@@ -31,4 +40,3 @@ target_sources(
     utf8.hpp
     value.hpp
 )
-target_compile_features(fizzy PUBLIC cxx_std_17)
