@@ -45,6 +45,15 @@ bool WabtEngine::parse(bytes_view input) const
 
 bool WabtEngine::instantiate(bytes_view wasm_binary)
 {
+    wabt::Errors errors;
+    wabt::interp::ModuleDesc module_desc;
+    const wabt::Result result = wabt::interp::ReadBinaryInterp(
+        wasm_binary.data(), wasm_binary.size(), wabt::ReadBinaryOptions{}, &errors, &module_desc);
+    if (result != wabt::Result::Ok)
+        return false;
+
+    m_module = wabt::interp::Module::New(m_store, module_desc);
+
     auto host_func = wabt::interp::HostFunc::New(m_store,
         wabt::interp::FuncType{{wabt::Type::I32, wabt::Type::I32}, {wabt::Type::I32}},
         [this](wabt::interp::Thread& thread, const wabt::interp::Values& args,
@@ -63,17 +72,9 @@ bool WabtEngine::instantiate(bytes_view wasm_binary)
             results[0].Set(ret);
             return wabt::Result::Ok;
         });
-
-    wabt::Errors errors;
-    wabt::interp::ModuleDesc module_desc;
-    const wabt::Result result = wabt::interp::ReadBinaryInterp(
-        wasm_binary.data(), wasm_binary.size(), wabt::ReadBinaryOptions{}, &errors, &module_desc);
-    if (result != wabt::Result::Ok)
-        return false;
-
-    m_module = wabt::interp::Module::New(m_store, module_desc);
-    wabt::interp::Trap::Ptr trap;
     const wabt::interp::RefVec imports = wabt::interp::RefVec{host_func->self()};
+
+    wabt::interp::Trap::Ptr trap;
     m_instance = wabt::interp::Instance::Instantiate(m_store, m_module.ref(), imports, &trap);
 
     return m_instance && !trap;
