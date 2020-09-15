@@ -56,13 +56,14 @@ bool WabtEngine::instantiate(bytes_view wasm_binary)
 
     auto host_func = wabt::interp::HostFunc::New(m_store,
         wabt::interp::FuncType{{wabt::Type::I32, wabt::Type::I32}, {wabt::Type::I32}},
-        [this](wabt::interp::Thread& thread, const wabt::interp::Values& args,
+        [](wabt::interp::Thread& thread, const wabt::interp::Values& args,
             wabt::interp::Values& results, wabt::interp::Trap::Ptr*) -> wabt::Result {
             const auto offset = args[0].i32_;
             const auto length = args[1].i32_;
             // TODO: move the memory lookup outside in order to reduce overhead
             assert(!thread.GetCallerInstance()->memories().empty());
-            wabt::interp::Memory::Ptr memory(m_store, thread.GetCallerInstance()->memories()[0]);
+            wabt::interp::Memory::Ptr memory(
+                thread.store(), thread.GetCallerInstance()->memories()[0]);
             assert(memory);
             auto memory_data = memory->UnsafeData();
             assert(memory->ByteSize() > (offset + length));
@@ -72,21 +73,21 @@ bool WabtEngine::instantiate(bytes_view wasm_binary)
             results[0].Set(ret);
             return wabt::Result::Ok;
         });
-    const wabt::interp::RefVec imports = wabt::interp::RefVec{host_func->self()};
 
     wabt::interp::Trap::Ptr trap;
-    m_instance = wabt::interp::Instance::Instantiate(m_store, m_module.ref(), imports, &trap);
+    m_instance =
+        wabt::interp::Instance::Instantiate(m_store, m_module.ref(), {host_func->self()}, &trap);
 
     return m_instance && !trap;
 }
 
 bool WabtEngine::init_memory(bytes_view memory)
 {
+    assert(m_instance);
     if (m_instance->memories().empty())
-        return {};
+        return false;
 
     wabt::interp::Memory::Ptr dst_memory(m_store, m_instance->memories()[0]);
-
     if (dst_memory->ByteSize() < memory.size())
         return false;
 
@@ -96,17 +97,20 @@ bool WabtEngine::init_memory(bytes_view memory)
 
 bytes_view WabtEngine::get_memory() const
 {
+    assert(m_instance);
     if (m_instance->memories().empty())
         return {};
 
     wabt::interp::Memory::Ptr memory(m_store, m_instance->memories()[0]);
-
     return {memory->UnsafeData(), memory->ByteSize()};
 }
 
 std::optional<WasmEngine::FuncRef> WabtEngine::find_function(
     std::string_view name, std::string_view) const
 {
+    if (!m_module)
+        return {};
+
     const auto it_export = std::find_if(m_module->desc().exports.begin(),
         m_module->desc().exports.end(), [name](const wabt::interp::ExportDesc& e) {
             return (e.type.type->kind == wabt::ExternalKind::Func && e.type.name == name);
