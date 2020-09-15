@@ -8,17 +8,16 @@
 
 #include <test/utils/adler32.hpp>
 #include <test/utils/wasm_engine.hpp>
+#include <algorithm>
 #include <cassert>
 
 namespace fizzy::test
 {
 class WabtEngine final : public WasmEngine
 {
-    wabt::interp::Environment m_env;
-    wabt::interp::DefinedModule* m_module{nullptr};
-
-    // WABT Executor/Thread with default options.
-    wabt::interp::Executor m_executor{&m_env};
+    mutable wabt::interp::Store m_store;  // getting RefPtr from Ref requires non-const Store
+    wabt::interp::Module::Ptr m_module;
+    wabt::interp::Instance::Ptr m_instance;
 
 public:
     bool parse(bytes_view input) const final;
@@ -37,123 +36,126 @@ std::unique_ptr<WasmEngine> create_wabt_engine()
 
 bool WabtEngine::parse(bytes_view input) const
 {
-    wabt::interp::Environment env;
-
-    wabt::interp::HostModule* hostModule = env.AppendHostModule("env");
-    assert(hostModule != nullptr);
-
-    hostModule->AppendFuncExport("adler32", {{wabt::Type::I32, wabt::Type::I32}, {wabt::Type::I32}},
-        [](const wabt::interp::HostFunc*, const wabt::interp::FuncSignature*,
-            const wabt::interp::TypedValues&, wabt::interp::TypedValues&) {
-            assert(false);
-            return wabt::interp::Result::Ok;
-        });
-
-    wabt::interp::DefinedModule* module{nullptr};
+    wabt::interp::ModuleDesc module_desc;
     wabt::Errors errors;
-    const wabt::Result result = wabt::ReadBinaryInterp(
-        &env, input.data(), input.size(), wabt::ReadBinaryOptions{}, &errors, &module);
+    const wabt::Result result = wabt::interp::ReadBinaryInterp(
+        input.data(), input.size(), wabt::ReadBinaryOptions{}, &errors, &module_desc);
     return (result == wabt::Result::Ok);
 }
 
 bool WabtEngine::instantiate(bytes_view wasm_binary)
 {
-    wabt::interp::HostModule* hostModule = m_env.AppendHostModule("env");
-    assert(hostModule != nullptr);
-
-    hostModule->AppendFuncExport("adler32", {{wabt::Type::I32, wabt::Type::I32}, {wabt::Type::I32}},
-        [this](const wabt::interp::HostFunc*, const wabt::interp::FuncSignature*,
-            const wabt::interp::TypedValues& args, wabt::interp::TypedValues& results) {
-            const auto offset = args[0].value.i32;
-            const auto length = args[1].value.i32;
+    auto host_func = wabt::interp::HostFunc::New(m_store,
+        wabt::interp::FuncType{{wabt::Type::I32, wabt::Type::I32}, {wabt::Type::I32}},
+        [this](wabt::interp::Thread& thread, const wabt::interp::Values& args,
+            wabt::interp::Values& results, wabt::interp::Trap::Ptr*) -> wabt::Result {
+            const auto offset = args[0].i32_;
+            const auto length = args[1].i32_;
             // TODO: move the memory lookup outside in order to reduce overhead
-            assert(m_env.GetMemoryCount() > 0);
-            auto memory = m_env.GetMemory(0);
-            assert(memory != nullptr);
-            auto memory_data = memory->data;
-            assert(memory_data.size() > (offset + length));
+            assert(!thread.GetCallerInstance()->memories().empty());
+            wabt::interp::Memory::Ptr memory(m_store, thread.GetCallerInstance()->memories()[0]);
+            assert(memory);
+            auto memory_data = memory->UnsafeData();
+            assert(memory->ByteSize() > (offset + length));
             const auto ret =
                 fizzy::test::adler32({reinterpret_cast<uint8_t*>(&memory_data[offset]), length});
-            results[0].set_i32(ret);
-            return wabt::interp::Result::Ok;
+            assert(results.size() == 1);
+            results[0].Set(ret);
+            return wabt::Result::Ok;
         });
 
     wabt::Errors errors;
-    const wabt::Result result = wabt::ReadBinaryInterp(&m_env, wasm_binary.data(),
-        wasm_binary.size(), wabt::ReadBinaryOptions{}, &errors, &m_module);
+    wabt::interp::ModuleDesc module_desc;
+    const wabt::Result result = wabt::interp::ReadBinaryInterp(
+        wasm_binary.data(), wasm_binary.size(), wabt::ReadBinaryOptions{}, &errors, &module_desc);
     if (result != wabt::Result::Ok)
         return false;
-    assert(m_module != nullptr);
 
-    // Run start function (this will return ok if no start function is present)
-    const wabt::interp::ExecResult r = m_executor.RunStartFunction(m_module);
-    return r.result == wabt::interp::Result::Ok;
+    m_module = wabt::interp::Module::New(m_store, module_desc);
+    wabt::interp::Trap::Ptr trap;
+    const wabt::interp::RefVec imports = wabt::interp::RefVec{host_func->self()};
+    m_instance = wabt::interp::Instance::Instantiate(m_store, m_module.ref(), imports, &trap);
+
+    return m_instance && !trap;
 }
 
 bool WabtEngine::init_memory(bytes_view memory)
 {
-    if (m_env.GetMemoryCount() == 0)
+    if (m_instance->memories().empty())
+        return {};
+
+    wabt::interp::Memory::Ptr dst_memory(m_store, m_instance->memories()[0]);
+
+    if (dst_memory->ByteSize() < memory.size())
         return false;
 
-    auto& dst = *m_env.GetMemory(0);
-    if (dst.data.size() < memory.size())
-        return false;
-
-    std::memcpy(dst.data.data(), memory.data(), memory.size());
+    std::memcpy(dst_memory->UnsafeData(), memory.data(), memory.size());
     return true;
 }
 
 bytes_view WabtEngine::get_memory() const
 {
-    if (m_env.GetMemoryCount() == 0)
+    if (m_instance->memories().empty())
         return {};
 
-    auto& env = const_cast<wabt::interp::Environment&>(m_env);
-    const auto& memory = env.GetMemory(0);
-    return {reinterpret_cast<uint8_t*>(memory->data.data()), memory->data.size()};
+    wabt::interp::Memory::Ptr memory(m_store, m_instance->memories()[0]);
+
+    return {memory->UnsafeData(), memory->ByteSize()};
 }
 
 std::optional<WasmEngine::FuncRef> WabtEngine::find_function(
     std::string_view name, std::string_view) const
 {
-    const wabt::interp::Export* e = m_module->GetExport({name.data(), name.size()});
-    if (e != nullptr && e->kind == wabt::ExternalKind::Func)
-        return reinterpret_cast<WasmEngine::FuncRef>(e);
-    return {};
+    const auto it_export = std::find_if(m_module->desc().exports.begin(),
+        m_module->desc().exports.end(), [name](const wabt::interp::ExportDesc& e) {
+            return (e.type.type->kind == wabt::ExternalKind::Func && e.type.name == name);
+        });
+    if (it_export == m_module->desc().exports.end())
+        return {};
+
+    return WasmEngine::FuncRef{it_export->index};
 }
 
 WasmEngine::Result WabtEngine::execute(
     WasmEngine::FuncRef func_ref, const std::vector<uint64_t>& args)
 {
-    const auto* e = reinterpret_cast<const wabt::interp::Export*>(func_ref);
+    assert(m_instance);
 
-    const auto func_sig = m_env.GetFuncSignature(m_env.GetFunc(e->index)->sig_index);
-    assert(func_sig->param_types.size() == args.size());
+    const auto func_idx = static_cast<wabt::interp::Index>(func_ref);
 
-    wabt::interp::TypedValues typed_args;
+    assert(func_idx < m_instance->funcs().size());
+    const auto func = m_store.UnsafeGet<wabt::interp::DefinedFunc>(m_instance->funcs()[func_idx]);
+
+    wabt::interp::Values typed_args;
     for (size_t i = 0; i < args.size(); ++i)
     {
         wabt::interp::Value value{};
-        const auto type = func_sig->param_types[i];
+        const auto type = func->type().params[i];
         if (type == wabt::Type::I32)
-            value.i32 = static_cast<uint32_t>(args[i]);
+            value.Set(static_cast<uint32_t>(args[i]));
         else
-            value.i64 = args[i];
-        typed_args.push_back(wabt::interp::TypedValue{type, value});
+            value.Set(args[i]);
+        typed_args.emplace_back(value);
     }
-    wabt::interp::ExecResult r = m_executor.RunExport(e, typed_args);
 
-    if (r.result != wabt::interp::Result::Ok)
+    wabt::interp::Values results;
+    if (!func->type().results.empty())
+        results.push_back({});
+
+    wabt::interp::Trap::Ptr trap;
+    auto call_result = func->Call(m_store, typed_args, results, &trap);
+
+    if (call_result != wabt::Result::Ok || trap)
         return {true, {}};
 
     WasmEngine::Result result{false, {}};
-    if (!r.values.empty())
+    if (!results.empty())
     {
-        const auto& value = r.values[0];
-        if (value.type == wabt::Type::I32)
-            result.value = value.get_i32();
-        else if (value.type == wabt::Type::I64)
-            result.value = value.get_i64();
+        const auto& value = results[0];
+        if (func->type().results[0] == wabt::Type::I32)
+            result.value = value.i32_;
+        else if (func->type().results[0] == wabt::Type::I64)
+            result.value = value.i64_;
     }
     return result;
 }
