@@ -15,7 +15,14 @@ namespace fizzy::test
 {
 class WabtEngine final : public WasmEngine
 {
-    mutable wabt::interp::Store m_store;  // getting RefPtr from Ref requires non-const Store
+    // mutable because getting RefPtr from Ref requires non-const Store
+    mutable wabt::interp::Store m_store{[] {
+        static wabt::Features features;
+        features.disable_multi_value();
+        features.disable_sat_float_to_int();
+        features.disable_sign_extension();
+        return features;
+    }()};
     wabt::interp::Module::Ptr m_module;
     wabt::interp::Instance::Ptr m_instance;
 
