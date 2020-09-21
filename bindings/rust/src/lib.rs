@@ -4,20 +4,21 @@
 
 mod sys;
 
-use std::ptr::NonNull;
-
 pub fn validate(input: &[u8]) -> bool {
     unsafe { sys::fizzy_validate(input.as_ptr(), input.len()) }
 }
 
 pub struct Module {
-    ptr: NonNull<sys::fizzy_module>,
+    ptr: *mut sys::fizzy_module,
 }
 
 impl Drop for Module {
     fn drop(&mut self) {
         println!("Dropping module");
-        unsafe { sys::fizzy_free_module(self.ptr.as_ptr()) }
+        // This is null if we took ownership with instantiate
+        if !self.ptr.is_null() {
+            unsafe { sys::fizzy_free_module(self.ptr) }
+        }
     }
 }
 
@@ -26,9 +27,15 @@ pub fn parse(input: &[u8]) -> Option<Module> {
     if ptr.is_null() {
         return None;
     }
-    Some(Module {
-        ptr: unsafe { NonNull::new_unchecked(ptr) },
-    })
+    Some(Module { ptr: ptr })
+}
+
+pub struct Instance {}
+
+impl Module {
+    fn instantiate(mut self) -> Option<Instance> {
+        None
+    }
 }
 
 #[cfg(test)]
