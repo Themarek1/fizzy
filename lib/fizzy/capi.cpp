@@ -59,23 +59,22 @@ void fizzy_free_module(fizzy_module* module)
     delete module;
 }
 
-struct fizzy_external_function_vector
-{
-    std::vector<fizzy::ExternalFunction> vector;
-};
-
 struct fizzy_instance
 {
     fizzy::Instance* instance;
 };
 
-fizzy_external_function_vector* fizzy_new_external_function_vector(
-    const fizzy_external_function* cfunctions, uint32_t size)
+fizzy_instance* fizzy_instantiate(fizzy_module* module,
+    const fizzy_external_function* imported_functions, uint32_t imported_functions_size)
 {
-    std::vector<fizzy::ExternalFunction> functions(size);
-    std::transform(
-        cfunctions, cfunctions + size, functions.begin(), [](const fizzy_external_function& cfunc) {
-            auto func = [cfunc](fizzy::Instance& instance, fizzy::span<const fizzy::Value> args,
+    try
+    {
+        std::vector<fizzy::ExternalFunction> functions(imported_functions_size);
+        for (size_t imported_func_idx = 0; imported_func_idx < imported_functions_size;
+             ++imported_func_idx)
+        {
+            auto func = [cfunc = imported_functions[imported_func_idx]](fizzy::Instance& instance,
+                            fizzy::span<const fizzy::Value> args,
                             int depth) -> fizzy::ExecutionResult {
                 fizzy_instance cinstance{&instance};
                 const auto cres = cfunc.function(cfunc.context, &cinstance,
@@ -89,43 +88,20 @@ fizzy_external_function_vector* fizzy_new_external_function_vector(
                 else
                     return bit_cast<fizzy::Value>(cres.value);
             };
-            // TODO leave type empty for now
-            return fizzy::ExternalFunction{std::move(func), {}};
-        });
 
-    return new fizzy_external_function_vector{std::move(functions)};
-}
+            // TODO get type from input array
+            auto func_type = module->module.imported_function_types[imported_func_idx];
 
-void fizzy_free_external_function_vector(fizzy_external_function_vector* vector)
-{
-    delete vector;
-}
-
-fizzy_instance* fizzy_instantiate(
-    fizzy_module* module, fizzy_external_function_vector* imported_functions)
-{
-    try
-    {
-        // TODO temp: fill types of imported funcs
-        if (imported_functions)
-        {
-            for (size_t imported_func_idx = 0;
-                 imported_func_idx < imported_functions->vector.size(); ++imported_func_idx)
-            {
-                imported_functions->vector[imported_func_idx].type =
-                    module->module.imported_function_types[imported_func_idx];
-            }
+            functions[imported_func_idx] =
+                fizzy::ExternalFunction{std::move(func), std::move(func_type)};
         }
 
-        auto instance = fizzy::instantiate(
-            std::move(module->module), imported_functions ? std::move(imported_functions->vector) :
-                                                            std::vector<fizzy::ExternalFunction>{});
+        auto instance = fizzy::instantiate(std::move(module->module), std::move(functions));
 
         auto cinstance = std::make_unique<fizzy_instance>();
         cinstance->instance = instance.release();
 
         fizzy_free_module(module);
-        fizzy_free_external_function_vector(imported_functions);
         return cinstance.release();
     }
     catch (...)

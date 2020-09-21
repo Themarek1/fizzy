@@ -45,17 +45,9 @@ typedef struct fizzy_external_function
     void* context;
 } fizzy_external_function;
 
-struct fizzy_external_function_vector;
-
-struct fizzy_external_function_vector* fizzy_new_external_function_vector(
-    const struct fizzy_external_function* functions, uint32_t size);
-
-void fizzy_free_external_function_vector(struct fizzy_external_function_vector*);
-
-// Takes ownership of module and imported_functions.
-// imported_functions may be NULL.
-struct fizzy_instance* fizzy_instantiate(
-    struct fizzy_module* module, struct fizzy_external_function_vector* imported_functions);
+// Takes ownership of module.
+struct fizzy_instance* fizzy_instantiate(struct fizzy_module* module,
+    const struct fizzy_external_function* imported_functions, uint32_t imported_functions_size);
 
 void fizzy_free_instance(struct fizzy_instance*);
 

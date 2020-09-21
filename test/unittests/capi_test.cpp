@@ -29,7 +29,7 @@ TEST(capi, instantiate)
     uint8_t wasm_prefix[]{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00};
     auto module = fizzy_parse(wasm_prefix, sizeof(wasm_prefix));
 
-    auto instance = fizzy_instantiate(module, nullptr);
+    auto instance = fizzy_instantiate(module, nullptr, 0);
     EXPECT_TRUE(instance);
 
     fizzy_free_instance(instance);
@@ -48,7 +48,7 @@ TEST(capi, execute)
 
     auto module = fizzy_parse(wasm.data(), wasm.size());
 
-    auto instance = fizzy_instantiate(module, nullptr);
+    auto instance = fizzy_instantiate(module, nullptr, 0);
 
     auto res = fizzy_execute(instance, 0, nullptr, 0, 0);
     EXPECT_FALSE(res.trapped);
@@ -86,9 +86,7 @@ TEST(capi, execute_with_host_function)
          },
             nullptr}};
 
-    auto imported_funcs = fizzy_new_external_function_vector(host_funcs, 2);
-
-    auto instance = fizzy_instantiate(module, imported_funcs);
+    auto instance = fizzy_instantiate(module, host_funcs, 2);
 
     auto res = fizzy_execute(instance, 0, nullptr, 0, 0);
     EXPECT_FALSE(res.trapped);
@@ -119,7 +117,7 @@ TEST(capi, imported_function_from_another_module)
     const auto bin1 = from_hex(
         "0061736d0100000001070160027f7f017f030201000707010373756200000a09010700200020016b0b");
     auto module1 = fizzy_parse(bin1.data(), bin1.size());
-    auto instance1 = fizzy_instantiate(module1, nullptr);
+    auto instance1 = fizzy_instantiate(module1, nullptr, 0);
 
     /* wat2wasm
     (module
@@ -146,9 +144,7 @@ TEST(capi, imported_function_from_another_module)
     };
     fizzy_external_function host_funcs[] = {{sub, instance1}};
 
-    auto imported_funcs = fizzy_new_external_function_vector(host_funcs, 1);
-
-    auto instance2 = fizzy_instantiate(module2, imported_funcs);
+    auto instance2 = fizzy_instantiate(module2, host_funcs, 1);
 
     fizzy_value args[] = {{44}, {2}};
     auto res2 = fizzy_execute(instance2, 1, args, 2, 0);
