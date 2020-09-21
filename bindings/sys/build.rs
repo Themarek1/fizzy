@@ -11,7 +11,8 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    let src = "fizzy";
+    // This is the root directory.
+    let src = "../../";
 
     let dst = Config::new(src)
         .define("FIZZY_TESTING", "OFF")
