@@ -98,3 +98,6 @@ if(FIZZY_TESTING)
     enable_testing()  # Enable CTest. Must be done in main CMakeLists.txt.
     add_subdirectory(test)
 endif()
+
+install(TARGETS fizzy EXPORT fizzyTargets)
+install(DIRECTORY include/fizzy TYPE INCLUDE)
