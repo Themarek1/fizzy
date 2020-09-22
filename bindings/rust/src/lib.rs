@@ -44,11 +44,13 @@ impl Drop for Instance {
 
 impl Module {
     fn instantiate(mut self) -> Option<Instance> {
-        assert!(!self.ptr.is_null());
-        let module = self.ptr;
+        // An instance was already created.
+        if self.ptr.is_null() {
+           return None;
+        }
+        let ptr = unsafe { sys::fizzy_instantiate(self.ptr, std::ptr::null_mut(), 0) };
         // Reset pointer to avoid drop to kick in.
         self.ptr = std::ptr::null_mut();
-        let ptr = unsafe { sys::fizzy_instantiate(module, std::ptr::null_mut(), 0) };
         if ptr.is_null() {
             return None;
         }
