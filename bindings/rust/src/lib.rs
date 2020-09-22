@@ -50,13 +50,17 @@ impl Module {
         }
         let ptr = unsafe { sys::fizzy_instantiate(self.ptr, std::ptr::null_mut(), 0) };
         // Reset pointer to avoid drop to kick in.
-        self.ptr = std::ptr::null_mut();
+        core::mem::forget(self);
         if ptr.is_null() {
             return None;
         }
         Some(Instance { ptr: ptr })
     }
 }
+
+//impl Instance {
+//     fn execute(&mut self, func_idx: u32, 
+//}
 
 #[cfg(test)]
 mod tests {
