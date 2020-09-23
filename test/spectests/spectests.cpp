@@ -480,7 +480,7 @@ private:
             args.push_back(*arg_value);
         }
 
-        return fizzy::execute(*instance, *func_idx, args);
+        return fizzy::execute(*instance, *func_idx, args.data());
     }
 
     bool check_integer_result(fizzy::Value actual_value, const json& expected)
