@@ -10,8 +10,7 @@
 
 namespace fizzy
 {
-template <typename T>
-using popcount = std::popcount<T>;
+using popcount = std::popcount;
 }
 
 #else
