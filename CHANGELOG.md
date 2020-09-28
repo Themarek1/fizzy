@@ -5,6 +5,40 @@ Documentation of all notable changes to the **Fizzy** project.
 The format is based on [Keep a Changelog],
 and this project adheres to [Semantic Versioning].
 
+## [0.5.0] — 2020-09-28
+
+### Added
+
+- `fizzy-testfloat` tool to check floating-point instructions implementation against Berkeley TestFloat test suite.
+  [#511](https://github.com/wasmx/fizzy/pull/511)
+- `instantiate` function now has `memory_pages_limit` parameter to configure hard limit on memory allocation.
+  [#515](https://github.com/wasmx/fizzy/pull/515)
+- `fizzy-spectests` tool can now run tests form a single `*.wast` file. [#525](https://github.com/wasmx/fizzy/pull/525)
+- There is now `lib/fizzy/cxx` directory with substitute implementations of C++20 standard library features, which Fizzy
+  uses when compiled with pre-C++20 standard (default). It contains now `span` and `bit_cast` utilities.
+  [#535](https://github.com/wasmx/fizzy/pull/535) [#541](https://github.com/wasmx/fizzy/pull/541)
+
+### Changed
+
+- Optimization in `execute` to do allocate memory only once for all of the arguments, locals and data stack. 
+  [#382](https://github.com/wasmx/fizzy/pull/382)
+- Trap handling in `execute` was simplified. [#425](https://github.com/wasmx/fizzy/pull/425)
+- `fizzy-bench` now uses WABT version 1.0.19. [#443](https://github.com/wasmx/fizzy/pull/443)
+- New simpler implementation of `f32.nearest` and `f64.nearest`. [#504](https://github.com/wasmx/fizzy/pull/504)
+- `execute.hpp` now includes declarations only for `execute` functions. Other functions of C++ API (`instantiate`, 
+  `resolve_imported_functions`, exports access) were moved to `instantiate.hpp`. 
+  [#518](https://github.com/wasmx/fizzy/pull/518)
+- Compiler warning settings now enable more strict checks. [#508](https://github.com/wasmx/fizzy/pull/508)
+- Parsing module with incorrect memory index now throws `validation_error` instead of `parser_error`.
+  [#546](https://github.com/wasmx/fizzy/pull/546)
+
+### Fixed
+
+- Incorrect results in some floating point operations with NaNs in GCC builds without optimization. 
+  [#513](https://github.com/wasmx/fizzy/pull/513)
+- Potential undefined behaviour in pointer arithmetic in parser.  [#539](https://github.com/wasmx/fizzy/pull/539)
+- Incorrect failure logging in `fizzy-spectests` tool.  [#548](https://github.com/wasmx/fizzy/pull/548)
+  
 ## [0.4.0] — 2020-09-01
 
 This release introduces complete floating-point support.
@@ -362,6 +396,7 @@ First release!
 [0.2.0]: https://github.com/wasmx/fizzy/releases/tag/v0.2.0
 [0.3.0]: https://github.com/wasmx/fizzy/releases/tag/v0.3.0
 [0.4.0]: https://github.com/wasmx/fizzy/releases/tag/v0.4.0
+[0.5.0]: https://github.com/wasmx/fizzy/releases/tag/v0.5.0
 
 [Keep a Changelog]: https://keepachangelog.com/en/1.0.0/
 [Semantic Versioning]: https://semver.org
